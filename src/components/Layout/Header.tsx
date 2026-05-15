@@ -176,9 +176,13 @@ const Header = ({
 
     const storedClinicId =
       Number(localStorage.getItem("clinic_id") || 0) || null;
+<<<<<<< Updated upstream
 
     const allowedClinics = userClinics.length > 0 ? userClinics : clinics;
 
+=======
+    const allowedClinics = clinics;
+>>>>>>> Stashed changes
     const validStored =
       storedClinicId &&
       allowedClinics.some((clinic) => clinic.id === storedClinicId)
@@ -195,19 +199,31 @@ const Header = ({
 
   useEffect(() => {
     const hydrateClinic = async () => {
+      if (!selectedClinicId) return;
+      if (lastFetchedClinicIdRef.current === selectedClinicId) return;
+
       setIsClinicLoading(true);
       try {
-        if (!selectedClinicId) return;
-        if (lastFetchedClinicIdRef.current === selectedClinicId) return;
-
         lastFetchedClinicIdRef.current = selectedClinicId;
         // ✅ FIX: Clear campaigns BEFORE switching clinic to prevent stale data display
         dispatch(clearCampaigns());
-        // Persist to localStorage FIRST so all service calls pick up the new clinic
-        localStorage.setItem("clinic_id", String(selectedClinicId));
-        await dispatch(fetchClinic(selectedClinicId));
-        // Re-fetch all clinic-scoped data in parallel
-        await Promise.all([
+        const action = await dispatch(fetchClinic(selectedClinicId));
+
+        if (fetchClinic.rejected.match(action)) {
+          const fallbackClinicId =
+            clinics.find((clinicItem) => clinicItem.id !== selectedClinicId)
+              ?.id ?? null;
+
+          if (fallbackClinicId) {
+            lastFetchedClinicIdRef.current = null;
+            setSelectedClinicId(fallbackClinicId);
+          }
+
+          return;
+        }
+
+        // Trigger heavy clinic-scoped fetches in background so lab switch feels instant.
+        void Promise.allSettled([
           dispatch(fetchLeads()),
           dispatch(fetchCampaign()),
           dispatch(fetchPipelines(selectedClinicId)),
@@ -218,13 +234,13 @@ const Header = ({
     };
 
     hydrateClinic();
-  }, [dispatch, selectedClinicId]);
+  }, [clinics, dispatch, selectedClinicId]);
 
   useEffect(() => {
     // dispatch(fetchCampaign());
-    if (!selectedClinicId) return;
+    if (!selectedClinicId || dbClinic?.id !== selectedClinicId) return;
     dispatch(fetchAllTemplates());
-  }, [dispatch, selectedClinicId]);
+  }, [dbClinic?.id, dispatch, selectedClinicId]);
 
   const handleIconClick = (
     event: React.MouseEvent<HTMLElement>,
@@ -567,7 +583,7 @@ const Header = ({
               {clinics.map((c) => (
                 <MenuItem
                   key={c.id}
-                  onClick={async () => {
+                  onClick={() => {
                     setSelectedClinicId(c.id);
                     handleClinicClose();
                   }}

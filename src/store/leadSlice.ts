@@ -39,11 +39,12 @@ const toNumericId = (value: unknown): number | null => {
   return null;
 };
 
-const collectLeadIds = (lead: Lead, keys: string[]): number[] => {
+const collectLeadIds = (lead: Lead, keys: string[]): (number | string)[] => {
   const rawLead = lead as unknown as Record<string, unknown>;
   return keys
-    .map((key) => toNumericId(rawLead[key]))
-    .filter((value): value is number => value !== null);
+    .map((key) => rawLead[key])
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => typeof value === "number" ? value : String(value));
 };
 
 const resolveCurrentUserId = (
@@ -67,13 +68,11 @@ const filterLeadsForRole = (
     return leads;
   }
 
-  // Keep existing behavior when user identity is unavailable.
   if (!currentUserId) {
     return leads;
   }
 
-  // User-level visibility should follow current assignee so reassignment
-  // immediately transfers ownership between users.
+  // Compare as both number and string for robustness
   return leads.filter((lead) => {
     const assigneeIds = collectLeadIds(lead, [
       "assigned_to_id",
@@ -81,8 +80,9 @@ const filterLeadsForRole = (
       "assignee_id",
       "owner_id",
     ]);
-
-    return assigneeIds.includes(currentUserId);
+    return assigneeIds.some(
+      (id) => id === currentUserId || id === String(currentUserId)
+    );
   });
 };
 

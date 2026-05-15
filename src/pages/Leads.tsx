@@ -43,9 +43,6 @@ import "../styles/Leads/leads.css";
 // STORAGE_KEY_FILTERS removed: filters must not survive a page refresh
 const STORAGE_KEY_TAB = "leads_active_tab";
 const STORAGE_KEY_VIEW = "leads_view_mode";
-const STORAGE_KEY_SELECTED_INDUSTRY = "leads_selected_industry";
-const STORAGE_KEY_SELECTED_PIPELINE = "leads_selected_pipeline_id";
-const STORAGE_KEY_DEFAULT_PIPELINE = "leads_default_pipeline_id";
 
 interface HeaderMatch {
   tableHeader: string;
@@ -420,12 +417,17 @@ const Leads: React.FC = () => {
   const [availablePipelines, setAvailablePipelines] = React.useState<
     Pipeline[]
   >([]);
+<<<<<<< Updated upstream
   const [selectedIndustry, setSelectedIndustry] = React.useState<string>(
     localStorage.getItem(STORAGE_KEY_SELECTED_INDUSTRY) ?? "",
   );
   const [selectedPipelineId, setSelectedPipelineId] = React.useState<string>(
     localStorage.getItem(STORAGE_KEY_SELECTED_PIPELINE) ?? "",
   );
+=======
+  const [selectedPipelineOverrideId, setSelectedPipelineOverrideId] =
+    React.useState("");
+>>>>>>> Stashed changes
   const attemptedClinicHydrationRef = React.useRef<Set<number>>(new Set());
   const tabScrollRef = React.useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = React.useState(false);
@@ -458,6 +460,7 @@ const Leads: React.FC = () => {
   }, []);
 
   const activePipeline = React.useMemo(
+<<<<<<< Updated upstream
     () => {
       const persistedPipelineId =
         localStorage.getItem(STORAGE_KEY_DEFAULT_PIPELINE) ??
@@ -475,6 +478,56 @@ const Leads: React.FC = () => {
   );
 
   const resolvedPipelineId = activePipeline?.id ?? selectedPipelineId;
+=======
+    () =>
+      availablePipelines.find((pipeline) => pipeline.is_active) ??
+      availablePipelines[0] ??
+      null,
+    [availablePipelines],
+  );
+
+  const selectedPipeline = React.useMemo(() => {
+    if (availablePipelines.length === 0) return null;
+
+    if (selectedPipelineOverrideId) {
+      return (
+        availablePipelines.find(
+          (pipeline) => pipeline.id === selectedPipelineOverrideId,
+        ) ?? activePipeline
+      );
+    }
+
+    return activePipeline;
+  }, [activePipeline, availablePipelines, selectedPipelineOverrideId]);
+
+  const selectedPipelineId = selectedPipeline?.id ?? "";
+
+  React.useEffect(() => {
+    if (availablePipelines.length === 0) {
+      if (selectedPipelineOverrideId) {
+        setSelectedPipelineOverrideId("");
+      }
+      return;
+    }
+
+    const hasSelectedPipeline = availablePipelines.some(
+      (pipeline) => pipeline.id === selectedPipelineOverrideId,
+    );
+
+    if (selectedPipelineOverrideId && hasSelectedPipeline) {
+      return;
+    }
+
+    const nextPipelineId =
+      availablePipelines.find((pipeline) => pipeline.is_active)?.id ??
+      availablePipelines[0]?.id ??
+      "";
+
+    if (nextPipelineId !== selectedPipelineOverrideId) {
+      setSelectedPipelineOverrideId(nextPipelineId);
+    }
+  }, [availablePipelines, selectedPipelineOverrideId]);
+>>>>>>> Stashed changes
 
   const applyFilters = React.useCallback(
     (leadsToFilter: Array<Lead & { status?: string }>) => {
@@ -574,19 +627,17 @@ const Leads: React.FC = () => {
     const defaultId = clinics.find(
       (clinicItem) => clinicItem.is_default,
     )?.clinic_id;
-    const allowedClinicIds = new Set([1, 2]);
+    const storedClinicId = Number(localStorage.getItem("clinic_id") || 0) || null;
     const ordered = [
+      clinic?.id,
+      storedClinicId,
       defaultId,
       ...clinics.map((clinicItem) => clinicItem.clinic_id),
-      1,
-      2,
-    ].filter(
-      (id): id is number => typeof id === "number" && allowedClinicIds.has(id),
-    );
+    ].filter((id): id is number => typeof id === "number" && id > 0);
 
     const unique = Array.from(new Set(ordered));
-    return unique.length > 0 ? unique : [1, 2];
-  }, [user]);
+    return unique;
+  }, [clinic?.id, user]);
 
   React.useEffect(() => {
     if (
@@ -646,6 +697,7 @@ const Leads: React.FC = () => {
   }, [canViewLeads, clinic?.id]);
 
   React.useEffect(() => {
+<<<<<<< Updated upstream
     localStorage.setItem(STORAGE_KEY_SELECTED_INDUSTRY, selectedIndustry);
   }, [selectedIndustry]);
 
@@ -686,6 +738,8 @@ const Leads: React.FC = () => {
   }, [activePipeline, availablePipelines, selectedIndustry, selectedPipelineId]);
 
   React.useEffect(() => {
+=======
+>>>>>>> Stashed changes
     void import("../components/LeadsHub/LeadsCalendar");
   }, []);
 
@@ -1213,8 +1267,6 @@ const Leads: React.FC = () => {
           <Button
             className="add-lead-btn"
             onClick={() => {
-              localStorage.setItem(STORAGE_KEY_SELECTED_INDUSTRY, selectedIndustry);
-              localStorage.setItem(STORAGE_KEY_SELECTED_PIPELINE, selectedPipelineId);
               navigate("/leads/add");
             }}
             disabled={!canAddLeads}
@@ -1279,25 +1331,18 @@ const Leads: React.FC = () => {
               minWidth: 0,
               alignItems: "center",
               pb: { xs: "3px", lg: 0 },
-              scrollbarWidth: { xs: "thin", lg: "none" } as never,
-              scrollbarColor: "#D1D5DB transparent",
-              "&::-webkit-scrollbar": { height: { xs: "3px", lg: "0px" } },
-              "&::-webkit-scrollbar-track": { background: "transparent" },
-              "&::-webkit-scrollbar-thumb": { background: "#D1D5DB", borderRadius: "4px" },
             }}
           >
-            {tabs.map((t, i) => (
-              <Box
-                key={i}
-                className={`pill-tab ${tab === i ? "active" : ""}`}
-                onClick={() => setTab(i)}
-                sx={{ flexShrink: 0, height: 34, display: "flex", alignItems: "center" }}
+            {tabs.map((tabItem, index) => (
+              <Button
+                key={tabItem.label}
+                className={`pill-tab ${tab === index ? "active" : ""}`}
+                onClick={() => setTab(index)}
+                sx={{ flexShrink: 0 }}
               >
-                {t.label}
-                {t.count !== null && (
-                  <span className="tab-count">({t.count})</span>
-                )}
-              </Box>
+                {tabItem.label}
+                {typeof tabItem.count === "number" ? ` (${tabItem.count})` : ""}
+              </Button>
             ))}
           </Box>
 
@@ -1332,7 +1377,7 @@ const Leads: React.FC = () => {
             alignItems: { xs: "stretch", sm: "center" },
             position: "relative",
             zIndex: 5,
-            flexWrap: { xs: "nowrap", lg: "nowrap" },
+            flexWrap: { xs: "wrap", lg: "nowrap" },
           }}
         >
           <Box
@@ -1350,7 +1395,50 @@ const Leads: React.FC = () => {
               fontWeight: 600,
             }}
           >
+<<<<<<< Updated upstream
             Default Pipeline: {activePipeline?.pipeline_name ?? "Not configured"}
+=======
+            Pipeline in use: {selectedPipeline?.pipeline_name ?? "Not configured"}
+          </Box>
+
+          <Box
+            sx={{
+              width: { xs: "100%", sm: "auto" },
+              minWidth: { sm: 220 },
+              minHeight: 34,
+              px: 1,
+              display: "flex",
+              alignItems: "center",
+              border: "1px solid #D0D5DD",
+              borderRadius: 1,
+              backgroundColor: "#fff",
+            }}
+          >
+            <select
+              value={selectedPipelineId}
+              onChange={(event) => {
+                setSelectedPipelineOverrideId(event.target.value);
+              }}
+              disabled={availablePipelines.length <= 1}
+              style={{
+                width: "100%",
+                border: "none",
+                outline: "none",
+                backgroundColor: "transparent",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "#344054",
+                cursor: availablePipelines.length <= 1 ? "not-allowed" : "pointer",
+              }}
+            >
+              {availablePipelines.map((pipeline) => (
+                <option key={pipeline.id} value={pipeline.id}>
+                  {pipeline.pipeline_name}
+                  {pipeline.is_active ? " (Active)" : ""}
+                </option>
+              ))}
+            </select>
+>>>>>>> Stashed changes
           </Box>
         </Stack>
       </Stack>
@@ -1409,16 +1497,24 @@ const Leads: React.FC = () => {
                 filters={activeFilters}
                 importedLeads={tab === 0 ? importedLeads : []}
                 canEditLeads={canEditLeads}
+<<<<<<< Updated upstream
                 selectedIndustry={selectedIndustry}
                 selectedPipelineId={resolvedPipelineId}
+=======
+                selectedPipelineId={selectedPipelineId}
+>>>>>>> Stashed changes
               />
             ) : (
               <LeadsBoard
                 search={search}
                 filters={activeFilters}
                 canEditLeads={canEditLeads}
+<<<<<<< Updated upstream
                 selectedIndustry={selectedIndustry}
                 selectedPipelineId={resolvedPipelineId}
+=======
+                selectedPipelineId={selectedPipelineId}
+>>>>>>> Stashed changes
               />
             ))}
         </React.Suspense>

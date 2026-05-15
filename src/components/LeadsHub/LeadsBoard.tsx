@@ -21,7 +21,6 @@ import { selectUsers } from "../../store/userSlice";
 import { selectClinic } from "../../store/clinicSlice";
 import {
   pipelineApi,
-  type Pipeline,
   type PipelineStage,
 } from "../../services/pipeline.api";
 import {
@@ -1477,34 +1476,20 @@ const LeadsBoard: React.FC<Props> = ({
       }
 
       try {
-        let activePipeline: Pipeline | null = null;
+        const pipelines = await pipelineApi.list(clinicId);
+        const pipelinesByIndustry = selectedIndustry
+          ? pipelines.filter(
+              (pipeline) => pipeline.industry_type === selectedIndustry,
+            )
+          : pipelines;
 
-        // Always prefer the explicitly selected pipeline because stage columns should
-        // reflect user selection exactly.
-        if (selectedPipelineId) {
-          try {
-            activePipeline = await pipelineApi.getById(selectedPipelineId);
-          } catch {
-            activePipeline = null;
-          }
-        }
-
-        if (!activePipeline) {
-          const pipelines = await pipelineApi.list(clinicId);
-          const pipelinesByIndustry = selectedIndustry
-            ? pipelines.filter(
-                (pipeline) => pipeline.industry_type === selectedIndustry,
-              )
-            : pipelines;
-
-          activePipeline =
-            pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ??
-            pipelinesByIndustry.find((pipeline) => pipeline.is_active) ??
-            pipelinesByIndustry[0] ??
-            pipelines.find((pipeline) => pipeline.is_active) ??
-            pipelines[0] ??
-            null;
-        }
+        const activePipeline =
+          pipelines.find((pipeline) => pipeline.id === selectedPipelineId) ??
+          pipelinesByIndustry.find((pipeline) => pipeline.is_active) ??
+          pipelinesByIndustry[0] ??
+          pipelines.find((pipeline) => pipeline.is_active) ??
+          pipelines[0] ??
+          null;
 
         if (
           !activePipeline ||

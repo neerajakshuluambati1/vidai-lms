@@ -180,7 +180,11 @@ const SalesPipelineSidebar = ({
 									<Typography variant="body2" sx={{ fontWeight: 700, color: "text.primary" }}>
 										{pipeline.pipeline_name}
 									</Typography>
+<<<<<<< Updated upstream
 									{defaultPipelineId === pipeline.id ? (
+=======
+									{pipeline.is_active ? (
+>>>>>>> Stashed changes
 										<Typography
 											variant="caption"
 											sx={{
@@ -197,7 +201,11 @@ const SalesPipelineSidebar = ({
 												backgroundColor: "#DCFCE7",
 											}}
 										>
+<<<<<<< Updated upstream
 											Default
+=======
+											Active
+>>>>>>> Stashed changes
 										</Typography>
 									) : null}
 									<Typography

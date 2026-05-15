@@ -479,8 +479,15 @@ const LeadsTable: React.FC<Props> = ({
       }
 
       try {
-        let selectedPipeline = null;
+        const pipelines = await pipelineApi.list(clinicId);
+        const pipelinesByIndustry = resolvedSelectedIndustry
+          ? pipelines.filter(
+              (pipeline) =>
+                pipeline.industry_type === resolvedSelectedIndustry,
+            )
+          : pipelines;
 
+<<<<<<< Updated upstream
         if (resolvedSelectedPipelineId) {
           try {
             selectedPipeline = await pipelineApi.getById(
@@ -508,6 +515,17 @@ const LeadsTable: React.FC<Props> = ({
             pipelines[0] ??
             null;
         }
+=======
+        const selectedPipeline =
+          pipelines.find(
+            (pipeline) => pipeline.id === resolvedSelectedPipelineId,
+          ) ??
+          pipelinesByIndustry.find((pipeline) => pipeline.is_active) ??
+          pipelinesByIndustry[0] ??
+          pipelines.find((pipeline) => pipeline.is_active) ??
+          pipelines[0] ??
+          null;
+>>>>>>> Stashed changes
 
         if (!selectedPipeline || !Array.isArray(selectedPipeline.stages)) {
           setEditStatusOptions(

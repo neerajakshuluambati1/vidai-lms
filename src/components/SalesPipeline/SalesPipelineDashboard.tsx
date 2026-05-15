@@ -78,8 +78,14 @@ const SalesPipelineDashboard = () => {
 	const pipelineLoading = useSelector(selectPipelineLoading);
 	const pipelineError = useSelector(selectPipelineError);
 	const selectedPipelineId = selectedPipeline?.id ?? null;
+<<<<<<< Updated upstream
 	const [defaultPipelineId, setDefaultPipelineId] = useState<string>(
 		localStorage.getItem(STORAGE_KEY_DEFAULT_PIPELINE) ?? "",
+=======
+	const activePipeline = pipelines.find((pipeline) => pipeline.is_active) ?? null;
+	const effectiveClinicId = Number(
+		localStorage.getItem("clinic_id") ?? clinic?.id ?? 0,
+>>>>>>> Stashed changes
 	);
 
 	const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -109,14 +115,15 @@ const SalesPipelineDashboard = () => {
 
 	useEffect(() => {
 		if (!canViewPipeline) return;
-		if (!clinic?.id) return;
-		dispatch(fetchPipelines(clinic.id));
-	}, [canViewPipeline, clinic?.id, dispatch]);
+		if (!effectiveClinicId) return;
+		dispatch(fetchPipelines(effectiveClinicId));
+	}, [canViewPipeline, dispatch, effectiveClinicId]);
 
 	useEffect(() => {
 		if (!canViewPipeline) return;
 		if (pipelineLoading || selectedPipeline || pipelines.length === 0) return;
 		const preferredPipeline =
+<<<<<<< Updated upstream
 			pipelines.find((pipeline) => pipeline.id === defaultPipelineId) ??
 			pipelines.find((pipeline) => pipeline.is_active) ??
 			pipelines[0];
@@ -128,6 +135,11 @@ const SalesPipelineDashboard = () => {
 			localStorage.setItem(STORAGE_KEY_DEFAULT_PIPELINE, defaultPipelineId);
 		}
 	}, [defaultPipelineId]);
+=======
+			pipelines.find((pipeline) => pipeline.is_active) ?? pipelines[0];
+		dispatch(fetchPipelineDetail(preferredPipeline.id));
+	}, [canViewPipeline, dispatch, pipelineLoading, pipelines, selectedPipeline]);
+>>>>>>> Stashed changes
 
 	useEffect(() => {
 		if (!actionMenuAnchor) return;
@@ -157,7 +169,7 @@ const SalesPipelineDashboard = () => {
 		industry: string;
 	}): Promise<boolean> => {
 		if (!canEditPipeline) return false;
-		if (!clinic?.id) return false;
+		if (!effectiveClinicId) return false;
 
 		const trimmedPipelineName = pipelineName.trim();
 		const isSingleLetterPipelineName =
@@ -200,7 +212,11 @@ const SalesPipelineDashboard = () => {
 				await pipelineApi.update(editPipelineData.id, {
 					pipeline_name: trimmedPipelineName,
 					industry_type: industry as PipelineIndustryType,
+<<<<<<< Updated upstream
 				}, clinic.id);
+=======
+				});
+>>>>>>> Stashed changes
 				await refreshPipelines();
 				if (selectedPipelineId === editPipelineData.id) {
 					await dispatch(fetchPipelineDetail(editPipelineData.id));
@@ -217,13 +233,16 @@ const SalesPipelineDashboard = () => {
 		} else {
 			try {
 				setActionInProgress(true);
-				await dispatch(
+				const createdPipeline = await dispatch(
 					createPipeline({
-						clinic_id: clinic.id,
+						clinic_id: effectiveClinicId,
 						pipeline_name: trimmedPipelineName,
 						industry_type: industry as PipelineIndustryType,
 					}),
 				).unwrap();
+				await pipelineApi.setActivePipelineForClinic(effectiveClinicId, createdPipeline.id);
+				await refreshPipelines();
+				await dispatch(fetchPipelineDetail(createdPipeline.id));
 				toast.success("Pipeline created successfully.");
 				return true;
 			} catch {
@@ -261,8 +280,29 @@ const SalesPipelineDashboard = () => {
 	};
 
 	const refreshPipelines = async () => {
-		if (!clinic?.id) return;
-		await dispatch(fetchPipelines(clinic.id));
+		if (!effectiveClinicId) return;
+		await dispatch(fetchPipelines(effectiveClinicId));
+	};
+
+	const handleSelectPipeline = async (pipelineId: string) => {
+		if (!canViewPipeline) return;
+		if (!effectiveClinicId) {
+			await dispatch(fetchPipelineDetail(pipelineId));
+			return;
+		}
+
+		try {
+			setActionInProgress(true);
+			await dispatch(fetchPipelineDetail(pipelineId));
+			await pipelineApi.setActivePipelineForClinic(effectiveClinicId, pipelineId);
+			await refreshPipelines();
+			await dispatch(fetchPipelineDetail(pipelineId));
+			toast.success("Active pipeline updated.");
+		} catch {
+			toast.error("Failed to update active pipeline.");
+		} finally {
+			setActionInProgress(false);
+		}
 	};
 
 	const handleSelectPipeline = async (pipelineId: string) => {
@@ -761,6 +801,26 @@ const SalesPipelineDashboard = () => {
 				Configure how leads flow, convert, and generate metrics across your
 				business
 			</Typography>
+			<Box
+				sx={{
+					display: "inline-flex",
+					alignItems: "center",
+					gap: 0.75,
+					mb: 1.8,
+					px: 1.25,
+					py: 0.7,
+					borderRadius: 1.5,
+					border: `1px solid ${alpha(theme.palette.success.main, 0.35)}`,
+					backgroundColor: alpha(theme.palette.success.main, 0.08),
+				}}
+			>
+				<Typography sx={{ fontSize: 12, fontWeight: 700, color: theme.palette.success.dark }}>
+					Active Pipeline:
+				</Typography>
+				<Typography sx={{ fontSize: 13, fontWeight: 700, color: "text.primary" }}>
+					{activePipeline?.pipeline_name ?? "Not configured"}
+				</Typography>
+			</Box>
 
 			<Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} sx={{ alignItems: "flex-start" }}>
 				<SalesPipelineSidebar
@@ -775,7 +835,13 @@ const SalesPipelineDashboard = () => {
 					actionMenuPipelineId={actionMenuPipelineId}
 					chipBackgrounds={chipBackgrounds}
 					onOpenCreatePipeline={handleOpenCreatePipeline}
+<<<<<<< Updated upstream
 					onSelectPipeline={handleSelectPipeline}
+=======
+					onSelectPipeline={(pipelineId) => {
+						void handleSelectPipeline(pipelineId);
+					}}
+>>>>>>> Stashed changes
 					onOpenActionMenu={handleOpenActionMenu}
 					onCloseActionMenu={handleCloseActionMenu}
 					onEditPipeline={handleEditPipeline}

@@ -293,6 +293,25 @@ export const pipelineApi = {
     return unwrapListData(response.data).map(normalizePipeline);
   },
 
+  async setActivePipelineForClinic(
+    clinicId: number,
+    activePipelineId: string,
+  ): Promise<void> {
+    const pipelines = await this.list(clinicId);
+    const updates = pipelines
+      .filter((pipeline) => {
+        const shouldBeActive = pipeline.id === activePipelineId;
+        return pipeline.is_active !== shouldBeActive;
+      })
+      .map((pipeline) =>
+        this.update(pipeline.id, {
+          is_active: pipeline.id === activePipelineId,
+        }),
+      );
+
+    await Promise.all(updates);
+  },
+
   async create(payload: CreatePipelinePayload): Promise<Pipeline> {
     const response = await http.post("/pipelines/create/", payload);
     return normalizePipeline(unwrapItemData(response.data));

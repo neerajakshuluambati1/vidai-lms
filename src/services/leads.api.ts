@@ -338,6 +338,8 @@ api.interceptors.response.use(
     const status: number | undefined = error?.response?.status;
     const url: string = error?.config?.url ?? "";
     const raw = error?.response?.data;
+    const isCanceledRequest =
+      error?.code === "ERR_CANCELED" || error?.name === "CanceledError";
     const skipLog = Boolean(
       (error?.config as { __skipErrorLog?: boolean } | undefined)
         ?.__skipErrorLog,
@@ -367,7 +369,7 @@ api.interceptors.response.use(
       return "Unknown error";
     };
 
-    if (!skipLog) {
+    if (!skipLog && !isCanceledRequest) {
       console.error(
         `❌ API Error [${status}] ${url}: ${normalizeError(raw ?? error?.message)}`,
       );

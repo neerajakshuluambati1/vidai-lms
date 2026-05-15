@@ -121,30 +121,18 @@ const FilterDialog: React.FC<FilterDialogProps> = ({
         const selectedPipelineId =
           localStorage.getItem(STORAGE_KEY_SELECTED_PIPELINE) ?? "";
 
-        let selectedPipeline: Pipeline | null = null;
+        const pipelines = await pipelineApi.list(clinicId);
+        const byIndustry = selectedIndustry
+          ? pipelines.filter((p) => p.industry_type === selectedIndustry)
+          : pipelines;
 
-        if (selectedPipelineId) {
-          try {
-            selectedPipeline = await pipelineApi.getById(selectedPipelineId);
-          } catch {
-            selectedPipeline = null;
-          }
-        }
-
-        if (!selectedPipeline) {
-          const pipelines = await pipelineApi.list(clinicId);
-          const byIndustry = selectedIndustry
-            ? pipelines.filter((p) => p.industry_type === selectedIndustry)
-            : pipelines;
-
-          selectedPipeline =
-            pipelines.find((p) => p.id === selectedPipelineId) ??
-            byIndustry.find((p) => p.is_active) ??
-            byIndustry[0] ??
-            pipelines.find((p) => p.is_active) ??
-            pipelines[0] ??
-            null;
-        }
+        const selectedPipeline =
+          pipelines.find((p) => p.id === selectedPipelineId) ??
+          byIndustry.find((p) => p.is_active) ??
+          byIndustry[0] ??
+          pipelines.find((p) => p.is_active) ??
+          pipelines[0] ??
+          null;
 
         const activeStages = (selectedPipeline?.stages ?? [])
           .filter((s) => isActiveStageStatus(s.stage_status))
