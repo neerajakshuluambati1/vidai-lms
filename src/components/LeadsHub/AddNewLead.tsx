@@ -445,7 +445,6 @@ export default function AddNewLead() {
           ? pipelines.filter((p) => p.industry_type === selectedIndustry)
           : pipelines;
 
-<<<<<<< Updated upstream
         if (selectedPipelineId) {
           try {
             selectedPipeline = await pipelineApi.getById(selectedPipelineId);
@@ -455,26 +454,12 @@ export default function AddNewLead() {
         }
 
         if (!selectedPipeline) {
-          const pipelines = await pipelineApi.list(clinicId);
-          const byIndustry = selectedIndustry
-            ? pipelines.filter((p) => p.industry_type === selectedIndustry)
-            : pipelines;
-
           selectedPipeline =
             pipelines.find((p) => p.id === selectedPipelineId) ??
             byIndustry[0] ??
             pipelines[0] ??
             null;
         }
-=======
-        selectedPipeline =
-          pipelines.find((p) => p.id === selectedPipelineId) ??
-          byIndustry.find((p) => p.is_active) ??
-          byIndustry[0] ??
-          pipelines.find((p) => p.is_active) ??
-          pipelines[0] ??
-          null;
->>>>>>> Stashed changes
 
         const rawStages = selectedPipeline?.stages ?? [];
         const activeStages = rawStages
