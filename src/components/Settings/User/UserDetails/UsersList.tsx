@@ -3,6 +3,10 @@ import {
   Box,
   Button,
   Checkbox,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   IconButton,
   InputAdornment,
   Pagination,
@@ -200,6 +204,8 @@ const UsersList: React.FC<Props> = ({
   });
   const [sortBy, setSortBy] = useState<SortKey | null>("username");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [deleteCandidate, setDeleteCandidate] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
 
   const filteredUsers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -308,6 +314,29 @@ const UsersList: React.FC<Props> = ({
   const tableMinWidth =
     FIXED_TABLE_MIN_WIDTH +
     activeOptionalColumns.length * OPTIONAL_COLUMN_MIN_WIDTH;
+
+  const handleOpenDeleteDialog = (user: User) => {
+    setDeleteCandidate(user);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    if (isDeletingUser) return;
+    setDeleteCandidate(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteCandidate || !onDeleteUser) {
+      return;
+    }
+
+    setIsDeletingUser(true);
+    try {
+      await onDeleteUser(deleteCandidate.id);
+      setDeleteCandidate(null);
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
 
   return (
     <Box>
@@ -573,7 +602,7 @@ const UsersList: React.FC<Props> = ({
                     >
                       <span>
                         <Button
-                          onClick={() => onDeleteUser?.(user.id)}
+                          onClick={() => handleOpenDeleteDialog(user)}
                           disabled={!canDeleteUsers || !onDeleteUser}
                           sx={{
                             minWidth: "auto",
@@ -609,6 +638,44 @@ const UsersList: React.FC<Props> = ({
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Dialog
+        open={Boolean(deleteCandidate)}
+        onClose={handleCloseDeleteDialog}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontSize: 18, fontWeight: 700, pb: 1 }}>
+          Delete User
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ fontSize: 14, color: "#4A4A4A" }}>
+            {deleteCandidate
+              ? `Are you sure you want to delete ${deleteCandidate.username}?`
+              : "Are you sure you want to delete this user?"}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={handleCloseDeleteDialog}
+            disabled={isDeletingUser}
+            sx={{ textTransform: "none" }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              void handleConfirmDelete();
+            }}
+            variant="contained"
+            color="error"
+            disabled={isDeletingUser}
+            sx={{ textTransform: "none" }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Popover
         open={isColumnPickerOpen}

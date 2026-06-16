@@ -4,6 +4,7 @@ import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import Tooltip from "@mui/material/Tooltip";
 import SearchIcon from "@mui/icons-material/Search";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import { useState, useEffect, useMemo } from "react";
@@ -11,6 +12,7 @@ import dayjs from "dayjs";
 
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch } from "../../store";
+import { selectUser } from "../../store/authSlice";
 
 import {
   fetchReviewRequests,
@@ -19,6 +21,10 @@ import {
 } from "../../store/reputationSlice";
 import { fetchLeads } from "../../store/leadSlice";
 import { selectClinic } from "../../store/clinicSlice";
+import {
+  hasAnySubcategoryActionPermission,
+  resolveUserRole,
+} from "../../utils/roleAccess";
 import { reputationApi } from "../../services/reputation.api";
 
 import BackwardIcon from "../../assets/icons/Backward_icon.svg";
@@ -169,6 +175,24 @@ const resolveTotalReviews = (record: RequestRecord): number => {
 
 const ReputationDashboard = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const user = useSelector(selectUser);
+  const authUser = user as unknown as Record<string, unknown> | null;
+  const role = resolveUserRole(authUser);
+  const nestedAuthUser =
+    authUser?.user && typeof authUser.user === "object"
+      ? (authUser.user as Record<string, unknown>)
+      : null;
+  const permissions = authUser?.permissions ?? nestedAuthUser?.permissions;
+  const reputationAliases = ["reputation management", "reputation"];
+  const canViewReputation =
+    role === "super_admin" ||
+    hasAnySubcategoryActionPermission(permissions, reputationAliases, "view") ||
+    hasAnySubcategoryActionPermission(permissions, reputationAliases, "print");
+  const canManageReputation =
+    role === "super_admin" ||
+    hasAnySubcategoryActionPermission(permissions, reputationAliases, "add") ||
+    hasAnySubcategoryActionPermission(permissions, reputationAliases, "edit");
+  const addPermissionTooltip = "You don't have permission to add.";
 
   const requests = useSelector(selectReputationRequests) as ReviewRequestItem[];
   const reputationReviews = useSelector(selectReputationReviews) as Array<
@@ -424,9 +448,13 @@ const ReputationDashboard = () => {
   const _reputationClinic = useSelector(selectClinic);
 
   useEffect(() => {
+    if (!canViewReputation) {
+      return;
+    }
+
     dispatch(fetchLeads());
     dispatch(fetchReviewRequests());
-  }, [dispatch, _reputationClinic?.id]);
+  }, [canViewReputation, dispatch, _reputationClinic?.id]);
 
   return (
     <Box sx={{ p: { xs: 0.25, sm: 0.5 } }}>
@@ -437,8 +465,14 @@ const ReputationDashboard = () => {
         </Typography>
       )}
 
+      {!openReviewDetails && !canViewReputation ? (
+        <Typography sx={{ color: "#B45309", mb: 2 }}>
+          You do not have permission to view reputation management.
+        </Typography>
+      ) : null}
+
       {/* ================= NORMAL PAGE ================= */}
-      {!openReviewDetails && (
+      {!openReviewDetails && canViewReputation && (
         <>
           {/* Header Cards */}
           <ReputationHeaderCards
@@ -519,32 +553,45 @@ const ReputationDashboard = () => {
                 />
               </IconButton>
 
-              <Button
-                variant="contained"
-                onClick={() => setOpenReviewDialog(true)}
-                startIcon={<AddCircleOutlineIcon />}
-                className="mobile-add-button"
-                sx={{
-                  textTransform: "none",
-                  borderRadius: "10px",
-                  px: 2.25,
-                  py: 1,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  backgroundColor: "#505050",
-                  color: "#fff",
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                  width: "auto",
-                  "&:hover": {
-                    backgroundColor: "#232323",
-                  },
-                }}
+              <Tooltip
+                title={!canManageReputation ? addPermissionTooltip : ""}
+                disableHoverListener={canManageReputation}
+                disableFocusListener={canManageReputation}
+                disableTouchListener={canManageReputation}
               >
-                <span className="mobile-add-button-label">
-                  New Review Request
+                <span>
+                  <Button
+                    variant="contained"
+                    onClick={() => {
+                      if (!canManageReputation) return;
+                      setOpenReviewDialog(true);
+                    }}
+                    disabled={!canManageReputation}
+                    startIcon={<AddCircleOutlineIcon />}
+                    className="mobile-add-button"
+                    sx={{
+                      textTransform: "none",
+                      borderRadius: "10px",
+                      px: 2.25,
+                      py: 1,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      backgroundColor: "#505050",
+                      color: "#fff",
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                      width: "auto",
+                      "&:hover": {
+                        backgroundColor: "#232323",
+                      },
+                    }}
+                  >
+                    <span className="mobile-add-button-label">
+                      New Review Request
+                    </span>
+                  </Button>
                 </span>
-              </Button>
+              </Tooltip>
             </Box>
           </Box>
 
