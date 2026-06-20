@@ -26,6 +26,8 @@ import {
 } from "../../services/pipeline.api";
 import {
   DepartmentAPI,
+  LeadAPI,
+  type LeadPayload,
   TwilioAPI,
 } from "../../services/leads.api";
 import { authApi } from "../../services/auth.api";
@@ -1452,6 +1454,8 @@ const LeadsBoard: React.FC<Props> = ({
   const [pipelineColumns, setPipelineColumns] = React.useState<ColumnConfig[]>(
     [],
   );
+  const [draggedLeadId, setDraggedLeadId] = React.useState<string | null>(null);
+  const [dropColumnKey, setDropColumnKey] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     dispatch(fetchLeads());
@@ -1462,6 +1466,63 @@ const LeadsBoard: React.FC<Props> = ({
       setLeads((reduxLeads as unknown as RawLead[]).map(mapRawToLeadItem));
     }
   }, [reduxLeads]);
+
+  const updateLeadInBoard = React.useCallback(
+    (leadId: string, updates: Partial<LeadItem>) => {
+      setLeads((currentLeads) =>
+        currentLeads.map((lead) =>
+          lead.id === leadId ? { ...lead, ...updates } : lead,
+        ),
+      );
+    },
+    [],
+  );
+
+  const handleLeadDrop = React.useCallback(
+    async (leadId: string, targetColumn: ColumnConfig) => {
+      setDraggedLeadId(null);
+      setDropColumnKey(null);
+
+      const currentLead = leads.find((lead) => lead.id === leadId);
+      if (!currentLead) return;
+
+      const targetLeadStatus = targetColumn.label.trim();
+      const currentLeadStatus = String(
+        currentLead.lead_status || currentLead.status || "",
+      ).trim();
+      const currentStageId = currentLead.stage_id ?? null;
+      const targetStageId = targetColumn.stageId ?? null;
+
+      if (
+        String(currentStageId ?? "") === String(targetStageId ?? "") &&
+        currentLeadStatus.toLowerCase() === targetLeadStatus.toLowerCase()
+      ) {
+        return;
+      }
+
+      const previousLeadState = currentLead;
+      updateLeadInBoard(leadId, {
+        stage_id: targetStageId,
+        lead_status: targetLeadStatus,
+        status: targetLeadStatus,
+      });
+
+      try {
+        await LeadAPI.update(leadId.replace(/^#/, ""), {
+          clinic_id: currentLead.clinic_id ?? clinic?.id ?? undefined,
+          stage_id: targetStageId,
+          lead_status: targetLeadStatus as unknown as LeadPayload["lead_status"],
+        });
+        dispatch(fetchLeads());
+        toast.success(`Moved to ${targetColumn.label}`);
+      } catch (error) {
+        console.error("Failed to move lead stage", error);
+        updateLeadInBoard(leadId, previousLeadState);
+        toast.error(`Failed to move lead to ${targetColumn.label}`);
+      }
+    },
+    [clinic?.id, dispatch, leads, updateLeadInBoard],
+  );
 
   React.useEffect(() => {
     const fetchPipelineStages = async () => {
@@ -1943,9 +2004,16 @@ const LeadsBoard: React.FC<Props> = ({
         ) : (
           activeBoardColumns.map((col) => {
             const leadsInCol = filteredLeads.filter((l) => {
-              if (col.stageId != null) {
-                if (String(l.stage_id) === String(col.stageId)) return true;
+              const hasColumnStageId = col.stageId != null;
+              const hasLeadStageId =
+                l.stage_id != null && String(l.stage_id).trim() !== "";
+
+              // When a lead already has a stage id, place it strictly by stage id
+              // to avoid matching additional columns through legacy text fallbacks.
+              if (hasColumnStageId && hasLeadStageId) {
+                return String(l.stage_id) === String(col.stageId);
               }
+
               const candidateStatuses = [
                 l.status,
                 l.lead_status,
@@ -1978,6 +2046,15 @@ const LeadsBoard: React.FC<Props> = ({
                 onOpenCall={handleCallOpen}
                 canEditLeads={canEditLeads}
                 setLeads={setLeads}
+                draggedLeadId={draggedLeadId}
+                dropColumnKey={dropColumnKey}
+                onDragStart={(leadId) => setDraggedLeadId(leadId)}
+                onDragEnd={() => {
+                  setDraggedLeadId(null);
+                  setDropColumnKey(null);
+                }}
+                onDragOverColumn={(columnKey) => setDropColumnKey(columnKey)}
+                onDropLead={(leadId) => void handleLeadDrop(leadId, col)}
               />
             );
           })

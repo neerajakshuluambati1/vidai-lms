@@ -61,6 +61,13 @@ type AssigneeOption = {
   email: string | undefined;
 };
 
+type DataCaptureFormField = {
+  key: string;
+  label: string;
+  type: "text" | "number" | "date" | "dropdown";
+  required: boolean;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const assigneeLabel = (option: AssigneeOption): string => {
   const fullName =
@@ -228,6 +235,9 @@ interface Step1Props {
   handleReferralDepartmentChange: (value: string) => void;
   referralDepartments: ReferralDepartment[];
   loadingReferralDepts: boolean;
+  dataCaptureFields?: DataCaptureFormField[];
+  dataCaptureValues?: Record<string, string>;
+  onDataCaptureChange?: (fieldKey: string, value: string) => void;
 }
 
 export function Step1({
@@ -260,6 +270,9 @@ export function Step1({
   handleReferralDepartmentChange,
   referralDepartments,
   loadingReferralDepts,
+  dataCaptureFields,
+  dataCaptureValues,
+  onDataCaptureChange,
 }: Step1Props) {
   const campaignSelected = Boolean(form.campaign);
   const [leadGeneratedByOpen, setLeadGeneratedByOpen] = React.useState(false);
@@ -319,6 +332,8 @@ export function Step1({
   const resolvedLeadStatusOptions: NextActionStatusOption[] = leadStatusOptions ?? [];
   const resolvedNextActionStatusOptions: NextActionStatusOption[] = nextActionStatusOptions ?? [];
   const resolvedNextActionTypeOptions: string[] = nextActionTypeOptions ?? [];
+  const resolvedDataCaptureFields = dataCaptureFields ?? [];
+  const resolvedDataCaptureValues = dataCaptureValues ?? {};
 
   const isCampaignDisabled =
     form.source === "Referral" ||
@@ -869,6 +884,66 @@ export function Step1({
             sx={inputStyle}
           />
         </Box>
+      )}
+
+      {/* ── DATA CAPTURE FIELDS (from selected pipeline stage) ───────────── */}
+      {resolvedDataCaptureFields.length > 0 && (
+        <>
+          <Typography variant="subtitle2" fontWeight={700} color="#1E293B" sx={{ mb: 2 }}>
+            DATA CAPTURE FIELDS
+          </Typography>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 2,
+              mb: 2,
+            }}
+          >
+            {resolvedDataCaptureFields.map((field) => {
+              const value = resolvedDataCaptureValues[field.key] ?? "";
+              const commonProps = {
+                fullWidth: true,
+                size: "small" as const,
+                value,
+                onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                  onDataCaptureChange?.(field.key, e.target.value),
+                sx: inputStyle,
+              };
+
+              return (
+                <Box key={field.key}>
+                  <Typography sx={labelStyle}>
+                    {field.label}
+                    {field.required && (
+                      <Typography component="span" sx={{ color: "#EF4444", fontSize: "0.75rem" }}>
+                        {" "}*
+                      </Typography>
+                    )}
+                  </Typography>
+
+                  {field.type === "date" ? (
+                    <TextField
+                      {...commonProps}
+                      type="date"
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  ) : field.type === "number" ? (
+                    <TextField
+                      {...commonProps}
+                      type="number"
+                    />
+                  ) : (
+                    <TextField
+                      {...commonProps}
+                      placeholder={field.type === "dropdown" ? "Enter value" : ""}
+                    />
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        </>
       )}
     </Box>
   );

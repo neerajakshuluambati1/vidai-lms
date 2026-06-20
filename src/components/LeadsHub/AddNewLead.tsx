@@ -37,6 +37,7 @@ import {
   isActiveStageStatus,
   type Pipeline,
   type PipelineStage,
+  type PipelineStageField,
 } from "../../services/pipeline.api";
 
 import {
@@ -196,6 +197,11 @@ const deriveAllActionTypeOptions = (stages: PipelineStage[]): string[] => {
   return labels.length > 0 ? labels : [...TASK_TYPES];
 };
 
+const buildDataCaptureKey = (field: PipelineStageField): string => {
+  if (field.id) return String(field.id);
+  return field.field_name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_");
+};
+
 // ====================== Component ======================
 export default function AddNewLead() {
   const navigate = useNavigate();
@@ -237,6 +243,8 @@ export default function AddNewLead() {
   const [pipelineStageNames, setPipelineStageNames] = React.useState<string[]>([]);
   const [pipelineStages, setPipelineStages] = React.useState<PipelineStage[]>([]);
   const [selectedNextActionStageId, setSelectedNextActionStageId] = React.useState<string | null>(null);
+  const [dataCaptureFields, setDataCaptureFields] = React.useState<PipelineStageField[]>([]);
+  const [dataCaptureValues, setDataCaptureValues] = React.useState<Record<string, string>>({});
   
   // ── Interests ─────────────────────────────────────────────────
   const [interests, setInterests] = React.useState<Interest[]>([]);
@@ -250,6 +258,32 @@ export default function AddNewLead() {
       })),
     [pipelineStages],
   );
+
+  const resolvedDataCaptureFields = React.useMemo(
+    () =>
+      dataCaptureFields
+        .filter((field) => field.field_name.trim().length > 0)
+        .map((field) => ({
+          key: buildDataCaptureKey(field),
+          label: field.field_name.trim(),
+          type: field.field_type,
+          required: field.is_mandatory,
+        })),
+    [dataCaptureFields],
+  );
+
+  const applyStageDataCapture = React.useCallback((stage: PipelineStage | null) => {
+    const nextFields = Array.isArray(stage?.fields) ? stage.fields : [];
+    setDataCaptureFields(nextFields);
+    setDataCaptureValues((previous) => {
+      const next: Record<string, string> = {};
+      nextFields.forEach((field) => {
+        const key = buildDataCaptureKey(field);
+        next[key] = previous[key] ?? "";
+      });
+      return next;
+    });
+  }, []);
 
   const rawCampaigns = useSelector(selectCampaign);
   const authedUser = useSelector(selectUser);
@@ -492,16 +526,19 @@ export default function AddNewLead() {
           );
 
           setSelectedNextActionStageId(firstStage.id ?? null);
+          applyStageDataCapture(firstStage);
         } else {
           setNextActionTypeOptions(deriveAllActionTypeOptions(activeStages));
+          applyStageDataCapture(null);
         }
       } catch {
         setNextActionTypeOptions([...TASK_TYPES]);
+        applyStageDataCapture(null);
       }
     };
 
     void loadFromPipeline();
-  }, [clinicId]);
+  }, [applyStageDataCapture, clinicId]);
 
   // ── Auto-clear nextType if it's no longer valid for the selected stage ─────
   React.useEffect(() => {
@@ -852,6 +889,7 @@ export default function AddNewLead() {
     const matched = pipelineStages.find(
       (s) => s.stage_name.trim().toLowerCase() === trimmed.toLowerCase(),
     );
+    applyStageDataCapture(matched ?? null);
     setSelectedNextActionStageId(matched?.id ?? null);
     const nextStages = pipelineStages
       .filter((s) => (matched ? s.stage_order > matched.stage_order : true))
@@ -925,6 +963,23 @@ export default function AddNewLead() {
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   const handleNext = async () => {
+    if (currentStep === 1) {
+      const missingRequiredDataCapture = resolvedDataCaptureFields.find(
+        (field) =>
+          field.required &&
+          String(dataCaptureValues[field.key] ?? "").trim().length === 0,
+      );
+
+      if (missingRequiredDataCapture) {
+        toast.error(`${missingRequiredDataCapture.label} is required`, {
+          position: "top-right",
+          autoClose: 3000,
+          theme: "colored",
+        });
+        return;
+      }
+    }
+
     const isValid = await validateStep(
       currentStep,
       form,
@@ -1396,6 +1451,14 @@ export default function AddNewLead() {
             handleReferralDepartmentChange={handleReferralDepartmentChange}
             referralDepartments={referralDepartments}
             loadingReferralDepts={loadingReferralDepts}
+            dataCaptureFields={resolvedDataCaptureFields}
+            dataCaptureValues={dataCaptureValues}
+            onDataCaptureChange={(fieldKey, value) => {
+              setDataCaptureValues((prev) => ({
+                ...prev,
+                [fieldKey]: value,
+              }));
+            }}
           />
         )}
         {currentStep === 2 && (

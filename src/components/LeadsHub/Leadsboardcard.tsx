@@ -384,6 +384,7 @@ interface LeadCardProps {
   columnColor: string;
   stageActions?: ColumnConfig["uiActions"];
   isHovered: boolean;
+  isDragging?: boolean;
   onHover: (id: string | null) => void;
   onOpenSms: (lead: LeadItem) => void;
   onOpenMail: (lead: LeadItem) => void;
@@ -392,6 +393,8 @@ interface LeadCardProps {
   canEditLeads?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setLeads: React.Dispatch<React.SetStateAction<any[]>>;
+  onDragStart?: (leadId: string) => void;
+  onDragEnd?: () => void;
 }
 
 export const LeadCard: React.FC<LeadCardProps> = ({
@@ -407,6 +410,9 @@ export const LeadCard: React.FC<LeadCardProps> = ({
   onOpenCall,
   canEditLeads = true,
   setLeads,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
 }) => {
   const navigate = useNavigate();
 
@@ -416,6 +422,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
       onMouseEnter={() => onHover(lead.id)}
       onMouseLeave={() => onHover(null)}
       onClick={() => navigate(`/leads/${lead.id.replace("#", "")}`)}
+      draggable={canEditLeads}
+      onDragStart={(event) => {
+        if (!canEditLeads) return;
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", lead.id);
+        onDragStart?.(lead.id);
+      }}
+      onDragEnd={() => {
+        onDragEnd?.();
+      }}
       sx={{
         p: 2.5,
         borderRadius: "16px",
@@ -424,6 +440,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         width: "100%",
         backgroundColor: "#FFFFFF",
         cursor: "pointer",
+        opacity: isDragging ? 0.55 : 1,
         ...(isHovered && {
           boxShadow: "0px 12px 24px -4px rgba(145,158,171,0.16)",
           borderColor: columnColor,
@@ -529,6 +546,12 @@ export interface LeadColumnProps {
   canEditLeads?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setLeads: React.Dispatch<React.SetStateAction<any[]>>;
+  draggedLeadId?: string | null;
+  dropColumnKey?: string | null;
+  onDragStart?: (leadId: string) => void;
+  onDragEnd?: () => void;
+  onDragOverColumn?: (columnKey: string) => void;
+  onDropLead?: (leadId: string) => void;
 }
 
 export const LeadColumn: React.FC<LeadColumnProps> = ({
@@ -542,8 +565,30 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
   onOpenCall,
   canEditLeads = true,
   setLeads,
+  draggedLeadId,
+  dropColumnKey,
+  onDragStart,
+  onDragEnd,
+  onDragOverColumn,
+  onDropLead,
 }) => (
   <Box
+    onDragOver={(event) => {
+      if (!canEditLeads) return;
+      event.preventDefault();
+      onDragOverColumn?.(col.stageId ?? col.label);
+    }}
+    onDragLeave={() => {
+      onDragOverColumn?.("");
+    }}
+    onDrop={(event) => {
+      if (!canEditLeads) return;
+      event.preventDefault();
+      const leadId = event.dataTransfer.getData("text/plain");
+      if (leadId) {
+        onDropLead?.(leadId);
+      }
+    }}
     sx={{
       minWidth: 350,
       maxWidth: 350,
@@ -553,7 +598,12 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
       flexDirection: "column",
       maxHeight: "100%",
       p: 2,
-      border: "1px solid #E2E8F0",
+      border:
+        dropColumnKey === (col.stageId ?? col.label)
+          ? "1px dashed #6366F1"
+          : "1px solid #E2E8F0",
+      backgroundColor:
+        dropColumnKey === (col.stageId ?? col.label) ? "#EEF2FF" : "#F1F5F9",
       flexShrink: 0,
     }}
   >
@@ -595,6 +645,7 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
           columnColor={col.color}
           stageActions={col.uiActions}
           isHovered={hoveredId === lead.id}
+          isDragging={draggedLeadId === lead.id}
           onHover={onHover}
           onOpenSms={onOpenSms}
           onOpenMail={onOpenMail}
@@ -602,6 +653,8 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
           onOpenCall={onOpenCall}
           canEditLeads={canEditLeads}
           setLeads={setLeads}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
         />
       ))}
     </Stack>
