@@ -30,7 +30,6 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { toast } from "react-toastify";
 
 import {
-  inputStyleWithError,
   SOURCE_OPTIONS,
   SUB_SOURCE_OPTIONS,
 } from "../LeadsHub/addNewLead.constants";
@@ -64,6 +63,18 @@ const showInputToast = (toastId: string, message: string) => {
     toast.error(message, { ...INPUT_TOAST_OPTIONS, toastId });
   }
 };
+
+const inputStyleWithError = (hasError: boolean) => ({
+  "& .MuiOutlinedInput-root": {
+    borderRadius: "8px",
+    fontSize: "0.875rem",
+    "& fieldset": { borderColor: hasError ? "#EF4444" : "#E2E8F0" },
+    "&:hover fieldset": { borderColor: hasError ? "#EF4444" : "#CBD5E1" },
+    "&.Mui-focused fieldset": {
+      borderColor: hasError ? "#EF4444" : "#6366F1",
+    },
+  },
+});
 
 // ── Capitalize first letter of each word (for action type labels) ─────────────
 const capitalizeWords = (str: string): string =>
