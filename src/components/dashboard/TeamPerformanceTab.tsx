@@ -8,7 +8,7 @@ import {
   Grid,
 } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import {
   LineChart,
   Line,
@@ -21,11 +21,7 @@ import type { TimeRange } from "./TimeRangeSelector";
 import { selectLeads } from "../../store/leadSlice";
 import { selectCampaign } from "../../store/campaignSlice";
 import { selectClinic } from "../../store/clinicSlice";
-import { loadDashboardCounts, selectCounts } from "../../store/referralSlice";
-import { fetchReferralSources, fetchReferralDepartments } from "../../services/referral.api";
-import type { ReferralSource } from "../../services/referral.api";
-import type { AppDispatch } from "../../store";
-import type { Lead } from "../../services/leads.api";
+import { EmployeeAPI, type Employee, type Lead } from "../../services/leads.api";
 import { chartStyles } from "../../styles/dashboard/SourcePerformanceChart.style";
 import SafeResponsiveContainer from "./SafeResponsiveContainer";
 import {
@@ -58,6 +54,52 @@ type DerivedMemberStats = MemberStats & {
   slaValue: number;
   lostLeads: number;
 };
+
+type FlexibleTeamMember = Employee & {
+  user_id?: number | string;
+  user_name?: string;
+  name?: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  role?: string;
+  designation?: string;
+};
+
+const toFiniteNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const normalizeMemberName = (member: FlexibleTeamMember): string => {
+  const firstName = String(member.first_name || "").trim();
+  const lastName = String(member.last_name || "").trim();
+  const fullFromParts = `${firstName} ${lastName}`.trim();
+
+  return (
+    String(member.emp_name || "").trim() ||
+    String(member.user_name || "").trim() ||
+    String(member.name || "").trim() ||
+    String(member.full_name || "").trim() ||
+    fullFromParts
+  );
+};
+
+const normalizeMemberRole = (member: FlexibleTeamMember): string =>
+  String(
+    member.emp_type ||
+      member.role ||
+      member.designation ||
+      member.department_name ||
+      "Team Member",
+  ).trim() || "Team Member";
+
+const normalizeMemberId = (member: FlexibleTeamMember): number | null =>
+  toFiniteNumber(member.id) ?? toFiniteNumber(member.user_id) ?? null;
 
 const normalizeLeadStatus = (status?: string | null): string => {
   if (!status) return "";
@@ -184,14 +226,12 @@ interface TeamPerformanceTabProps {
 }
 
 const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
-  const dispatch = useDispatch<AppDispatch>();
   const leads = useSelector(selectLeads) as Lead[];
   const campaigns = useSelector(selectCampaign) as CampaignItem[];
-  const referralCounts = useSelector(selectCounts);
   const selectedClinicId = useSelector(selectClinic)?.id;
   const clinicId = Number(selectedClinicId ?? 0);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
-  const [referralSources, setReferralSources] = useState<ReferralSource[]>([]);
+  const [teamMembers, setTeamMembers] = useState<Employee[]>([]);
   const performanceBuckets = useMemo(
     () => getTimeRangeBuckets(timeRange),
     [timeRange],
@@ -201,58 +241,18 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
       performanceBuckets.map((bucket) => ({ label: bucket.label, value: 0 })),
     [performanceBuckets],
   );
-  const referralDashboardTotal = useMemo(
-    () =>
-      Object.values(referralCounts || {}).reduce(
-        (sum, count) => sum + Number(count || 0),
-        0,
-      ),
-    [referralCounts],
-  );
-
   useEffect(() => {
-    if (!clinicId) return;
+    if (!clinicId) {
+      setTeamMembers([]);
+      return;
+    }
 
-    dispatch(loadDashboardCounts(clinicId));
-
-    fetchReferralDepartments(clinicId)
-      .then((depts) => {
-        // ── FIXED: only include active departments ────────────────────────
-        const activeDepts = depts.filter(
-          (d) => d.id > 0 && d.is_active !== false,
-        );
-
-        if (activeDepts.length === 0) {
-          // Static fallback: fetch all sources (no department filter)
-          return fetchReferralSources({});
-        }
-        return Promise.all(
-          activeDepts.map((d) =>
-            fetchReferralSources({ referral_department_id: d.id }),
-          ),
-        ).then((results) => {
-          // Flatten and deduplicate by source id
-          const seen = new Set<number>();
-          const flat: ReferralSource[] = [];
-          for (const batch of results) {
-            for (const src of batch) {
-              if (!seen.has(src.id)) {
-                seen.add(src.id);
-                flat.push(src);
-              }
-            }
-          }
-          return flat;
-        });
+    EmployeeAPI.listByClinic(clinicId)
+      .then((employees) => {
+        setTeamMembers(Array.isArray(employees) ? employees : []);
       })
-      .then((sources) => {
-        // ── FIXED: only keep active referral sources ──────────────────────
-        // is_active may be a boolean or absent (treat absent as active).
-        const activeSources = sources.filter((s) => s.is_active !== false);
-        setReferralSources(activeSources);
-      })
-      .catch(() => setReferralSources([]));
-  }, [clinicId, dispatch]);
+      .catch(() => setTeamMembers([]));
+  }, [clinicId]);
 
   const { members, overview, memberStatsMap, memberPerformanceMap } =
     useMemo(() => {
@@ -272,7 +272,7 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
           campaign.is_active !== false,
       );
 
-      if (referralSources.length === 0) {
+      if (teamMembers.length === 0 && activeLeads.length === 0) {
         return {
           members: [],
           overview: {
@@ -281,7 +281,7 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
             appointments: "0",
             converted: "0",
             rate: "0.0%",
-            referrals: formatInteger(referralDashboardTotal),
+            referrals: "0",
             revenue: "$0",
             sla: "0.0%",
           },
@@ -295,32 +295,25 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
         DerivedMemberStats & { name: string; role: string; img: string }
       >();
 
-      // ── source.id → memberMap key (all departments including Doctors) ────
-      const sourceIdToKey = new Map<number, string>();
-      // doctor source name (lowercase) → memberMap key (for lead matching by assigned_to_name)
-      const doctorNameToKey = new Map<string, string>();
+      const memberIdToKey = new Map<number, string>();
+      const memberNameToKey = new Map<string, string>();
 
-      // Build all members from the API — same data as Referral Manager.
-      // referral_count is the authoritative assigned-leads count from the backend.
-      // referralSources is already filtered to active-only before this memo runs.
-      referralSources.forEach((source) => {
-        const sourceName = (source.name || "").trim();
-        if (!sourceName) return;
+      const ensureMember = (id: number | null, name: string, role: string) => {
+        const normalizedName = name.trim();
+        if (!normalizedName) return;
 
-        const sourceKey = `${source.id}::${sourceName}`;
-        sourceIdToKey.set(source.id, sourceKey);
+        const keyId = id ?? -1;
+        const memberKey = `${keyId}::${normalizedName}`;
 
-        const deptName = (source.referral_department_name || "").toLowerCase().trim();
-        if (deptName === "doctors") {
-          doctorNameToKey.set(sourceName.toLowerCase(), sourceKey);
-        }
+        if (id !== null) memberIdToKey.set(id, memberKey);
+        memberNameToKey.set(normalizedName.toLowerCase(), memberKey);
 
-        if (memberMap.has(sourceKey)) return;
-        memberMap.set(sourceKey, {
-          name: sourceName,
-          role: source.referral_department_name ?? "Referral Source",
+        if (memberMap.has(memberKey)) return;
+        memberMap.set(memberKey, {
+          name: normalizedName,
+          role,
           img: "",
-          assignedLeads: source.referral_count ?? 0,
+          assignedLeads: 0,
           callsMade: 0,
           followUps: 0,
           appointments: 0,
@@ -333,36 +326,52 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
           slaValue: 0,
           lostLeads: 0,
         });
+      };
+
+      teamMembers.forEach((member) => {
+        const flexibleMember = member as FlexibleTeamMember;
+        const memberId = normalizeMemberId(flexibleMember);
+        const memberName = normalizeMemberName(flexibleMember);
+        const memberRole = normalizeMemberRole(flexibleMember);
+        if (memberName) {
+          ensureMember(memberId, memberName, memberRole);
+        }
+      });
+
+      activeLeads.forEach((lead) => {
+        const assignedId = toFiniteNumber(lead.assigned_to_id);
+        const assignedName = String(lead.assigned_to_name || "").trim();
+        if (!assignedName && assignedId === null) return;
+
+        const fallbackName = assignedName || `User ${assignedId}`;
+        ensureMember(assignedId, fallbackName, "Team Member");
       });
 
       clinicCampaigns.forEach((campaign) => {
-        const ownerName = (campaign.assigned_to_name || "").trim();
-        if (!ownerName) return;
+        const campaignAssigneeId = Number(campaign.assigned_to_id);
+        const ownerName = (campaign.assigned_to_name || "").trim().toLowerCase();
+        const key =
+          (Number.isFinite(campaignAssigneeId)
+            ? memberIdToKey.get(campaignAssigneeId)
+            : undefined) ||
+          (ownerName ? memberNameToKey.get(ownerName) : undefined);
+        if (!key || !memberMap.has(key)) return;
 
-        const matchedEntry = Array.from(memberMap.entries()).find(
-          ([, stats]) => stats.name === ownerName,
-        );
-        if (!matchedEntry) return;
-
-        const [key, stats] = matchedEntry;
+        const stats = memberMap.get(key)!;
         memberMap.set(key, { ...stats, campaigns: stats.campaigns + 1 });
       });
 
-      // ── Accumulate real lead stats into each member ───────────────────────
       activeLeads.forEach((lead) => {
-        let key: string | undefined;
-
-        const deptName = (lead.referral_department_name || "").toLowerCase().trim();
-        if (deptName === "doctors") {
-          const name = (lead.assigned_to_name || "").trim();
-          key = name ? doctorNameToKey.get(name.toLowerCase()) : undefined;
-        } else if (lead.referral_source_id != null) {
-          key = sourceIdToKey.get(lead.referral_source_id);
-        }
+        const assignedId = Number(lead.assigned_to_id);
+        const assignedName = (lead.assigned_to_name || "").trim().toLowerCase();
+        const key =
+          (Number.isFinite(assignedId) ? memberIdToKey.get(assignedId) : undefined) ||
+          (assignedName ? memberNameToKey.get(assignedName) : undefined);
 
         if (!key || !memberMap.has(key)) return;
 
         const stats = memberMap.get(key)!;
+        stats.assignedLeads += 1;
 
         const normalizedStatus = normalizeLeadStatus(lead.lead_status);
         if (normalizedStatus === "appointment") stats.appointments += 1;
@@ -471,7 +480,7 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
         appointments: formatInteger(totals.appointments),
         converted: formatInteger(totals.converted),
         rate: `${totals.assigned > 0 ? ((totals.converted / totals.assigned) * 100).toFixed(1) : "0.0"}%`,
-        referrals: formatInteger(referralDashboardTotal),
+        referrals: formatInteger(activeLeads.length),
         revenue: `$${totals.revenue.toLocaleString("en-US")}`,
         sla: `${membersWithStats.length > 0 ? (totals.sla / membersWithStats.length).toFixed(1) : "0.0"}%`,
       };
@@ -496,9 +505,7 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
 
       const memberPerformance: Record<string, PerformanceChartPoint[]> = {};
       membersWithStats.forEach((member) => {
-        const memberKey = Array.from(sourceIdToKey.values()).find(
-          (k) => k.endsWith(`::${member.name}`),
-        ) ?? doctorNameToKey.get(member.name.toLowerCase());
+        const memberKey = memberNameToKey.get(member.name.toLowerCase());
 
         const totalsByBucket = new Array<number>(
           performanceBuckets.length,
@@ -509,15 +516,14 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
 
         activeLeads
           .filter((lead) => {
-            const deptName = (lead.referral_department_name || "").toLowerCase().trim();
-            if (deptName === "doctors") {
-              const name = (lead.assigned_to_name || "").trim();
-              return name ? doctorNameToKey.get(name.toLowerCase()) === memberKey : false;
-            }
-            if (lead.referral_source_id != null) {
-              return sourceIdToKey.get(lead.referral_source_id) === memberKey;
-            }
-            return false;
+            const assignedId = Number(lead.assigned_to_id);
+            const assignedName = (lead.assigned_to_name || "").trim().toLowerCase();
+            const leadMemberKey =
+              (Number.isFinite(assignedId)
+                ? memberIdToKey.get(assignedId)
+                : undefined) ||
+              (assignedName ? memberNameToKey.get(assignedName) : undefined);
+            return leadMemberKey === memberKey;
           })
           .forEach((lead) => {
             const date = new Date(lead.modified_at || lead.created_at);
@@ -554,8 +560,7 @@ const TeamPerformanceTab = ({ timeRange }: TeamPerformanceTabProps) => {
       clinicId,
       leads,
       performanceBuckets,
-      referralDashboardTotal,
-      referralSources,
+      teamMembers,
       timeRange,
     ]);
 

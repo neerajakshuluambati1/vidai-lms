@@ -30,6 +30,7 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { toast } from "react-toastify";
 
 import {
+  inputStyleWithError,
   SOURCE_OPTIONS,
   SUB_SOURCE_OPTIONS,
 } from "../LeadsHub/addNewLead.constants";
@@ -177,6 +178,7 @@ function useAllLanguages() {
 export default function EditLead() {
   // ── Language hook (replaces hardcoded 3-item list) ────────────────────────
   const { languages: allLanguages, loading: languagesLoading } = useAllLanguages();
+  const [invalidFields, setInvalidFields] = React.useState<Record<string, boolean>>({});
 
   const {
     navigate,
@@ -207,6 +209,9 @@ export default function EditLead() {
     referralDepartments,
     loadingReferralDepts,
     referralDepartment,
+    resolvedDataCaptureFields,
+    dataCaptureValues,
+    setDataCaptureValues,
     // ── Shared fields ──
     fullName,
     setFullName,
@@ -300,6 +305,23 @@ export default function EditLead() {
     interests,
   } = useEditLead();
 
+  const clearInvalidField = React.useCallback((field: string) => {
+    setInvalidFields((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }, []);
+
+  const hasError = (field: string): boolean => Boolean(invalidFields[field]);
+
+  React.useEffect(() => {
+    if (department) clearInvalidField("department");
+    if (selectedDate) clearInvalidField("appointmentDate");
+    if (slot) clearInvalidField("slot");
+  }, [clearInvalidField, department, selectedDate, slot]);
+
   // ====================== Loading / Error states ======================
   if (loading) {
     return (
@@ -352,6 +374,30 @@ export default function EditLead() {
     source === "Referral"
       ? referralDepartments.map((d) => d.name)
       : (SUB_SOURCE_OPTIONS[source] ?? []);
+  const referralDepartmentDisplay =
+    referralDepartments.find((d) => String(d.id) === referralDepartment)?.name ||
+    leadData.referral_department_name ||
+    referralDepartment ||
+    "N/A";
+
+  const handleValidatedSave = () => {
+    const nextInvalidFields: Record<string, boolean> = {};
+    const bookingActive =
+      wantAppointment === "yes" ||
+      Boolean((selectedDate || leadData?.appointment_date) && slot) ||
+      Boolean(leadData?.book_appointment);
+
+    if (bookingActive) {
+      if (IS_MEDICAL_APP && !department) nextInvalidFields.department = true;
+      if (!selectedDate && !leadData?.appointment_date) {
+        nextInvalidFields.appointmentDate = true;
+      }
+      if (!slot) nextInvalidFields.slot = true;
+    }
+
+    setInvalidFields(nextInvalidFields);
+    handleSave();
+  };
 
   // ── Input sanitizers ───────────────────────────────────────────────────────
   const handleFullNameChange = (value: string) => {
@@ -461,7 +507,8 @@ export default function EditLead() {
         sx={{
           borderRadius: "12px",
           overflow: "hidden",
-          height: "88vh",
+          height: "calc(100vh - 112px)",
+          minHeight: 0,
           display: "flex",
           flexDirection: "column",
         }}
@@ -554,6 +601,7 @@ export default function EditLead() {
             bgcolor: "white",
             p: 1,
             flex: 1,
+            minHeight: 0,
             overflowY: "auto",
             "&::-webkit-scrollbar": { width: "8px" },
             "&::-webkit-scrollbar-thumb": {
@@ -1085,19 +1133,15 @@ export default function EditLead() {
                   />
                 </Box>
 
-                {/* NON-CONTRACTS: Referral Department read-only */}
-                {!IS_CONTRACTS_APP && (
+                {/* CONTRACTS: Referral Department is captured on add and kept read-only after creation. */}
+                {IS_CONTRACTS_APP && (
                   <Box>
                     <Typography sx={labelStyle}>Referral Department</Typography>
                     <TextField
                       fullWidth
                       size="small"
-                      value={
-                        referralDepartments.find(
-                          (d) => String(d.id) === referralDepartment,
-                        )?.name ?? referralDepartment
-                      }
-                      InputProps={{ readOnly: true }}
+                      value={referralDepartmentDisplay}
+                      disabled
                       sx={readOnlyStyle}
                     />
                   </Box>
@@ -1214,6 +1258,57 @@ export default function EditLead() {
                   />
                 </Box>
               </Box>
+
+              {resolvedDataCaptureFields.length > 0 && (
+                <>
+                  <Typography sx={sectionLabelStyle}>
+                    STAGE DATA CAPTURE
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: 2,
+                      mb: 3,
+                    }}
+                  >
+                    {resolvedDataCaptureFields.map((field) => (
+                      <Box key={field.key}>
+                        <Typography sx={labelStyle}>
+                          {field.label}
+                          {field.required && (
+                            <Typography
+                              component="span"
+                              sx={{ color: "#EF4444", fontSize: "0.75rem" }}
+                            >
+                              {" "}*
+                            </Typography>
+                          )}
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          type={
+                            field.type === "number"
+                              ? "number"
+                              : field.type === "date"
+                                ? "date"
+                                : "text"
+                          }
+                          value={dataCaptureValues[field.key] ?? ""}
+                          onChange={(e) =>
+                            setDataCaptureValues((prev) => ({
+                              ...prev,
+                              [field.key]: e.target.value,
+                            }))
+                          }
+                          sx={inputStyle}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
+                </>
+              )}
             </Box>
           )}
 
@@ -1610,11 +1705,13 @@ export default function EditLead() {
                           size="small"
                           value={department}
                           onChange={(e) => {
+                            clearInvalidField("department");
                             setDepartment(e.target.value);
                             setAppointmentPersonnel("");
                             setAppointmentPersonnelSearch("");
                           }}
-                          sx={inputStyle}
+                          error={hasError("department")}
+                          sx={inputStyleWithError(hasError("department"))}
                           disabled={loadingDepartments}
                           InputProps={{
                             endAdornment: loadingDepartments ? (
@@ -1705,12 +1802,16 @@ export default function EditLead() {
                           value={selectedDate}
                           format="DD/MM/YYYY"
                           disablePast
-                          onChange={(val) => handleDateChange(val)}
+                          onChange={(val) => {
+                            clearInvalidField("appointmentDate");
+                            handleDateChange(val);
+                          }}
                           slotProps={{
                             textField: {
                               size: "small",
                               fullWidth: true,
-                              sx: inputStyle,
+                              error: hasError("appointmentDate"),
+                              sx: inputStyleWithError(hasError("appointmentDate")),
                             },
                           }}
                         />
@@ -1723,8 +1824,12 @@ export default function EditLead() {
                         fullWidth
                         size="small"
                         value={slot}
-                        onChange={(e) => setSlot(e.target.value)}
-                        sx={inputStyle}
+                        onChange={(e) => {
+                          clearInvalidField("slot");
+                          setSlot(e.target.value);
+                        }}
+                        error={hasError("slot")}
+                        sx={inputStyleWithError(hasError("slot"))}
                         SelectProps={{
                           native: false,
                           MenuProps: SLOT_MENU_PROPS,
@@ -1818,7 +1923,7 @@ export default function EditLead() {
             </Button>
           ) : (
             <Button
-              onClick={handleSave}
+              onClick={handleValidatedSave}
               variant="contained"
               disabled={saving || !canEditLeads}
               sx={{
